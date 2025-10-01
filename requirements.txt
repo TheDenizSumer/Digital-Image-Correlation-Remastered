@@ -1,0 +1,4 @@
+ludwig
+matplotlib
+opencv-python
+pandas
