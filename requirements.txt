@@ -2,3 +2,4 @@ ludwig
 matplotlib
 opencv-python
 pandas
+scikit-learn

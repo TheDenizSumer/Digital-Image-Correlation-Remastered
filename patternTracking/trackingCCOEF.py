@@ -1,61 +1,79 @@
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.ndimage import maximum_filter, label, find_objects
 
-# --- Parameters ---
-patch_size = 32    # size of square patch
-search_radius = 10 # search window around each patch center
-step = 40          # spacing between subset centers
+ref_path = r"patternTracking\rulerImage.jpg"
+defm_path = r"patternTracking\rulerSnippet.jpg"
 
-# --- Load frames ---
-ref_path = r"C:\Users\deniz\Coding\Digital-Image-Correlation-Remastered\patternTracking\image.png"
-defm_path = r"C:\Users\deniz\Coding\Digital-Image-Correlation-Remastered\patternTracking\streched.png"
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
 
-ref_color = cv2.imread(ref_path)  # Loads in BGR by default
+# -----------------------------
+# Helper: subpixel peak refinement
+# -----------------------------
+def subpixel_peak(res, max_loc):
+    x, y = max_loc
+    if 0 < x < res.shape[1]-1 and 0 < y < res.shape[0]-1:
+        window = res[y-1:y+2, x-1:x+2]
 
-ref = cv2.cvtColor(ref_color, cv2.COLOR_BGR2GRAY)
-cv2.imshow("ref", ref)
-defm_color = cv2.imread(defm_path)
-defm = cv2.cvtColor(defm_color, cv2.COLOR_BGR2GRAY)
+        dx = 0.5 * (window[1,2] - window[1,0])
+        dy = 0.5 * (window[2,1] - window[0,1])
+        dxx = window[1,2] - 2*window[1,1] + window[1,0]
+        dyy = window[2,1] - 2*window[1,1] + window[0,1]
+        dxy = 0.25 * (window[2,2] - window[2,0] - window[0,2] + window[0,0])
 
-h, w = ref.shape
+        A = np.array([[dxx, dxy],
+                      [dxy, dyy]])
+        b = -np.array([dx, dy])
+        try:
+            offset = np.linalg.solve(A, b)
+            return x + offset[0], y + offset[1]
+        except np.linalg.LinAlgError:
+            return float(x), float(y)
+    return float(x), float(y)
 
-# --- Grid of patch centers ---
-ys = np.arange(patch_size//2, h - patch_size//2, step)
-xs = np.arange(patch_size//2, w - patch_size//2, step)
+# -----------------------------
+# Load full image and screenshot
+# -----------------------------
+full_image_color = cv2.imread(ref_path)
+screenshot_color = cv2.imread(defm_path)
 
-displacements = []
+# Convert to grayscale
+full_image = cv2.cvtColor(full_image_color, cv2.COLOR_BGR2GRAY)
+screenshot = cv2.cvtColor(screenshot_color, cv2.COLOR_BGR2GRAY)
 
-for y in ys:
-    for x in xs:
-        # Extract reference patch
-        patch = ref[y - patch_size//2:y + patch_size//2,
-                    x - patch_size//2:x + patch_size//2]
+# Optional: enhance contrast
+full_image = cv2.equalizeHist(full_image)
+screenshot = cv2.equalizeHist(screenshot)
 
-        # Define search window in deformed frame
-        y1 = max(y - search_radius - patch_size//2, 0)
-        y2 = min(y + search_radius + patch_size//2, h)
-        x1 = max(x - search_radius - patch_size//2, 0)
-        x2 = min(x + search_radius + patch_size//2, w)
+# -----------------------------
+# Template matching
+# -----------------------------
+res = cv2.matchTemplate(full_image, screenshot, cv2.TM_CCOEFF_NORMED)
+_, max_val, _, max_loc = cv2.minMaxLoc(res)
 
-        search_area = defm[y1:y2, x1:x2]
+# Integer-pixel match
+int_match = max_loc
+# Subpixel refinement
+sub_match = subpixel_peak(res, max_loc)
 
-        # Match template
-        res = cv2.matchTemplate(search_area, patch, cv2.TM_CCOEFF_NORMED)
-        _, max_val, _, max_loc = cv2.minMaxLoc(res)
+print(f"Integer match at {int_match}")
+print(f"Subpixel match at {sub_match}")
 
-        # Compute displacement (dx, dy)
-        dx = (max_loc[0] + patch_size//2 + x1) - x
-        dy = (max_loc[1] + patch_size//2 + y1) - y
+# -----------------------------
+# Visualization
+# -----------------------------
+h, w = screenshot.shape
+img_disp = cv2.cvtColor(full_image, cv2.COLOR_GRAY2BGR)
 
-        displacements.append((x, y, dx, dy))
+# Draw integer match (red rectangle)
+cv2.rectangle(img_disp, int_match, (int_match[0]+w, int_match[1]+h), (0,0,255), 2)
+# Draw subpixel match (green circle)
+cv2.circle(img_disp, (int(round(sub_match[0])), int(round(sub_match[1]))), radius=5, color=(0,255,0), thickness=2)
 
-# --- Visualization ---
-fig, ax = plt.subplots()
-ax.imshow(defm, cmap="gray")
-
-for (x, y, dx, dy) in displacements:
-    ax.arrow(x, y, dx, dy, color="red", head_width=3, head_length=3)
-
-ax.set_title("2D Deformation Field (matchTemplate)")
+plt.figure(figsize=(8,6))
+plt.title("Red=integer match, Green=subpixel refined match")
+plt.imshow(img_disp[..., ::-1])
 plt.show()
