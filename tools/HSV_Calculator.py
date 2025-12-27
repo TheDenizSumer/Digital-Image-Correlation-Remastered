@@ -22,13 +22,12 @@ def hsv_calc():
     cv2.createTrackbar("us","Trackbars",255,255,nothing)
     cv2.createTrackbar("uv","Trackbars",255,255,nothing)
     while True:
-        cap = cv2.VideoCapture('C:\\Users\\deniz\\Desktop\\Python\\TechInnovationProject\\Deform_stick.MOV')
+        cap = cv2.VideoCapture(f'videos\deform_vice2.mov')
 
         frame_width = int(cap.get(3))
         frame_height = int(cap.get(4))
         
         size = (frame_width, frame_height)
-        print(size)
         if (cap.isOpened()== False): 
             print("Error opening video stream or file")
 

@@ -6,10 +6,25 @@ import os
 import math 
 import copy
 import time
+from scipy import stats
 
-#rows x columns of dots
-DOTSHAPE = (2, 33)
+# video = r"C:\Users\deniz\Coding\Digital-Image-Correlation-Remastered\videos\deform_stick.MOV"
+# lower = np.array([0, 0, 0]) 
+# upper = np.array([9, 255,  76])
+# frame_number = 590
+# DOTSHAPE = (2, 33)
 
+# video = r"C:\Users\deniz\Coding\Digital-Image-Correlation-Remastered\videos\deform_purple.mov"
+# lower = np.array([ 9, 161, 38] ) 
+# upper = np.array([ 62, 255,  83])
+# DOTSHAPE = (9, 3)
+# frame_number = 0
+
+video = r"C:\Users\deniz\Coding\Digital-Image-Correlation-Remastered\videos\deform_vice2.mov"
+lower = np.array([ 0, 0, 21] ) 
+upper = np.array([ 179, 62,  102])
+DOTSHAPE = (18, 16)
+frame_number = 0
 
 def getColorMask(img):
     #deform_purple
@@ -22,8 +37,8 @@ def getColorMask(img):
     #Deform_stick.MOV
     #lower = np.array([0, 0, 0]) 
     #upper = np.array([5, 255,  109])
-    lower = np.array([0, 0, 0]) 
-    upper = np.array([9, 255,  76])
+    # lower = np.array([0, 0, 0]) 
+    # upper = np.array([9, 255,  76])
 
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     out  = cv2.inRange(hsv, lower, upper)
@@ -75,7 +90,6 @@ def find_dot_center_otsu(image_path):
 
 
 # Extracting video and getting to the specific starting frame
-video = r"C:\Users\deniz\Coding\Digital-Image-Correlation-Remastered\videos\Deform_stick.MOV"
 cap = cv2.VideoCapture(video)
 
 frame_width = int(cap.get(3))
@@ -86,7 +100,6 @@ size = (frame_width, frame_height)
 if (cap.isOpened()== False): 
     print("Error opening video stream or file")
 
-frame_number = 590
 
 # Set the position to the desired frame
 cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
@@ -111,7 +124,6 @@ def processCountours(contours, prev=None): # prev would be dots array
     #contours = [[int(cnt[0]), int(cnt[1]), int(cnt[2]*2), int(cnt[3]*2), True] for cnt in contours]
     #contours = [[int(cnt[0]-cnt[2]*.5), int(cnt[1]-cnt[3]*.5), int(cnt[2]*2), int(cnt[3]*2), True] for cnt in contours]
     contours = [[int(cnt[0]), int(cnt[1]), int(cnt[2]*1.2), int(cnt[3]*1.2), True] for cnt in contours]
-
     # remove bounding boxes within other bounding boxes
     for cnt in contours:
         x, y, w, h = cnt[0], cnt[1], cnt[2], cnt[3]
@@ -163,7 +175,11 @@ def processCountours(contours, prev=None): # prev would be dots array
                     f.write(f"{cnt}\n")
     else:
         centers = returnAllDotCenters(prev)
+        # if DOTSHAPE[0] * DOTSHAPE[1] != len(contours):
+        #     print(f"Warning: Expected {DOTSHAPE[0] * DOTSHAPE[1]} contours, but found {len(contours)}. Skipping frame.")
+        #     return prev.flatten().tolist(), True
         newContours = []
+        distances = []
         for center in centers:
             cx, cy = center
             closest_cnt = None
@@ -177,10 +193,13 @@ def processCountours(contours, prev=None): # prev would be dots array
                     closest_cnt = cnt
             if closest_cnt is not None and closest_cnt not in newContours:
                 newContours.append(closest_cnt[:4])  # Keep this contour
+                distances.append(closest_dist)
+        pass
         contours = newContours
-    return contours
+    return contours, False
 
-SSuserInput = 'y'
+#SSuserInput = 'y'
+SSuserInput = input("Use saved selection? (y/n): ")
 
 if SSuserInput == 'y':
     with open("clickLog.txt", "r") as f:
@@ -249,7 +268,7 @@ points = []
 centeriodImage = copy.deepcopy(untouched_frame)
 
 
-def contoursToDots(contours, prev=None):
+def initialContoursToDots(contours, prev=None):
     points = []
     for cnt in contours:
         points.append(Snippet(cnt[:4]))
@@ -314,7 +333,7 @@ def contoursToDots(contours, prev=None):
         # pop every neighbor point out of the points lsit and when going to a new row, take the point with the smallest x value and use it as the first refernce point (set it to be the first entry in that row)
     return xDiff, yDiff, dots
 
-pxdiff, pydiff, firstFrameDots = contoursToDots(contours)
+pxdiff, pydiff, firstFrameDots = initialContoursToDots(contours)
 # firstFrameDots = returnAllDotCenters(firstFrameDots)
 # for dot in firstFrameDots:
 #     cv2.circle(centeriodImage, dot,  4, (0, 255, 0), -1)
@@ -326,9 +345,61 @@ pxdiff, pydiff, firstFrameDots = contoursToDots(contours)
 # display_contours_with_rectangles(frame, contours)
 # resized_frame = cv2.resize(frame, (size[0] // 4, size[1] // 4))
 
-# cv2.imshow('Bounding Rectangles', resized_frame)
+# cv2.imshow('Bounding Rectangles', resizesd_frame)
 # cv2.waitKey(0)
 # cv2.destroyAllWindows()
+
+def contoursToDots(contours, prevDots):
+    contours = [[int(cnt[0]), int(cnt[1]), int(cnt[2]*1.2), int(cnt[3]*1.2), True] for cnt in contours]
+    for cnt in contours:
+        x, y, w, h = cnt[0], cnt[1], cnt[2], cnt[3]
+        for other in contours:
+            if other == cnt:
+                continue
+            ox, oy, ow, oh = other[0], other[1], other[2], other[3]
+            if x > ox and y > oy and (x + w) < (ox + ow) and (y + h) < (oy + oh):
+                cnt[4] = False  # Mark for removal
+                break
+    contours = [cnt for cnt in contours if cnt[4]]
+    if len(contours) < DOTSHAPE[0] * DOTSHAPE[1]:
+        print(f"Warning: Expected {DOTSHAPE[0] * DOTSHAPE[1]} contours, but found {len(contours)}. Skipping frame.")
+        return prevDots, True, []
+    
+    newDots = np.empty(DOTSHAPE, dtype=object)
+    distances = []
+    for dot in prevDots.flatten():
+        cx, cy = dot.center
+        closest_cnt = None
+        closest_dist = float('inf')
+        for cnt in contours:
+            x, y, w, h = cnt[0], cnt[1], cnt[2], cnt[3]
+            cnt_cx, cnt_cy = x + w // 2, y + h // 2
+            dist = distance(cx, cy, cnt_cx, cnt_cy)
+            if dist < closest_dist:
+                closest_dist = dist
+                closest_cnt = cnt
+        if closest_cnt is not None:
+            newDot = Snippet(closest_cnt[:4])
+            newDot.id = dot.id
+            newDot.extract_snippet(frame)
+            newDot.find_dot_center_otsu()
+            newDots[dot.id // DOTSHAPE[1], dot.id % DOTSHAPE[1]] = newDot
+            contours.remove(closest_cnt)
+            distances.append(closest_dist)
+
+    data = np.array(distances)
+
+    z_scores = np.abs(stats.zscore(data))
+    outliers = data[z_scores > 6]  # "3" means 3 standard deviations from the mean
+
+    print("Outliers:", outliers)
+    skipFrame = False
+    for outlier in outliers:
+        if outlier > pxdiff + 10 or outlier > pydiff + 10:
+            skipFrame = True
+            break
+    return newDots, skipFrame, outliers
+
 
 
 dotsInFrame = [copy.deepcopy(firstFrameDots)]
@@ -339,15 +410,27 @@ while cap.isOpened():
     print(id)
     if not paused:
         ret, frame = cap.read()
-    if id == 17:
+    if id == 130:
         pass
     contours = get_contours(dilate(getColorMask(frame)))
-    contours = processCountours(contours, dotsInFrame[-1])
+    #contours, skipFrame = processCountours(contours, dotsInFrame[-1])
     display_contours_with_rectangles(frame, contours)
-    xDiff, yDiff, newDots = contoursToDots(contours)
-    if xDiff > pxdiff + 10 or yDiff > pydiff + 10:
+    resized_frame = cv2.resize(frame, (size[0] // 4, size[1] // 4))
+    cv2.imshow(f"contours", resized_frame)
+    #xDiff, yDiff, newDots = contoursToDots(contours)
+    newDots, skipFrame, outliers = contoursToDots(contours, dotsInFrame[-1])
+    # if xDiff > pxdiff + 10 or yDiff > pydiff + 10:
+    #     print("Skipping frame due to large dot movement")
+    #     #paused = True
+    #     quit()
+    #     continue
+    if skipFrame:
         print("Skipping frame due to large dot movement")
+        resized_frame = cv2.resize(frame, (size[0] // 4, size[1] // 4))
+        cv2.imshow("Video", resized_frame)
+        time.sleep(3)
         #paused = True
+        #quit()
         continue
     # Processing each dot snippet in the current frame
     dotsInFrame.append(newDots)
@@ -359,6 +442,8 @@ while cap.isOpened():
     cv2.imshow("Video", resized_frame)
     #time.sleep(.5)
         # Press 'q' to quit
+    if len(outliers) > 0:
+        time.sleep(4)
     if cv2.waitKey(25) & 0xFF == ord('q'):
         break
 cap.release()

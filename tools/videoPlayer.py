@@ -1,13 +1,13 @@
 import cv2
 import numpy as np
 
-video_path = r"C:\Users\deniz\Coding\Digital-Image-Correlation-Remastered\videos\Deform_stick.MOV"
+video_path = r"C:\Users\deniz\Coding\Digital-Image-Correlation-Remastered\videos\deform_purple.mov"
 
 cap = cv2.VideoCapture(video_path)
 frame_width = int(cap.get(3))
 frame_height = int(cap.get(4))
 size = (frame_width, frame_height)
-frame_number = 590
+frame_number = 0 # 590 for stick
 
 # Set the position to the desired frame
 cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
